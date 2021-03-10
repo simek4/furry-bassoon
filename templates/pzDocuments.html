@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+  <head>
+    <title>ttstockrepair</title>
+  </head>
+  <body>
+<button type="button" onclick="window.location.href='{{ url_for( 'index' ) }}';">Menu główne</button>
+
+ <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script type=text/javascript>
+        $(function() {
+          $('a#test').on('click', function(e) {
+            e.preventDefault()
+            $.getJSON('/redirectPZReport',
+                function(data) {
+              //do nothing
+            });
+            return false;
+          });
+        });
+   </script>
+
+
+  <div class='container'>
+
+        <form>
+            <a href=# id=test><button class='btn btn-default'>Wygeneruj dokumenty PZ...</button></a>
+        </form>
+
+    </div>
+
+
+
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                <span>{{ message }}</span>
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+                </button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+    <h1>Dokumenty PZ</h1>
+
+    <h2>Ostatni przesłany dokument: {{lastPZ}}</h2>
+
+    <h2>Załaduj dokumenty PZ</h2>
+    <form method="POST" action="" enctype="multipart/form-data">
+      <p><input type="file" name="file"></p>
+      <p><input type="submit" value="Dodaj do stanu magazynowego"></p>
+    </form>
+
+
+
+<style>
+ td {
+        width: 150px;
+        text-align: center;
+        border: 1px solid black;
+        padding: 5px;
+      }
+</style>
+<h3>Ostatnie przesłane dokumenty:</h3>
+<table>
+  <thead>
+    <tr>
+        <th>ID</th>
+        <th>Nazwa</th>
+        <th>Dokument</th>
+        <th>Data</th>
+
+    </tr>
+    </thead>
+    <tbody>
+     {% for row in data %}
+            <tr>
+                <td>{{row[0]}}</td>
+                <td>{{row[1]}}</td>
+                <td>{{row[2]}}</td>
+                <td>{{row[6]}}</td>
+
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+
+  </body>
+</html>
+
+

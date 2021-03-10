@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <title>ttstockrepair</title>
+  </head>
+  <body>
+  <button type="button" onclick="window.location.href='{{ url_for( 'index' ) }}';">Menu główne</button>
+<!--  <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>-->
+
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script type=text/javascript>
+        $(function() {
+          $('a#test').on('click', function(e) {
+            e.preventDefault()
+            $.getJSON('/redirectSaleReport',
+                function(data) {
+              //do nothing
+            });
+            return false;
+          });
+        });
+   </script>
+
+
+  <div class='container'>
+
+        <form>
+            <a href=# id=test><button class='btn btn-default'>Wygeneruj raport...</button></a>
+        </form>
+
+    </div>
+
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                <span>{{ message }}</span>
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+                </button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+
+    <h1>Raporty sprzedaży</h1>
+
+    <h2>Proponowany zakres dat raportu sprzedaży: </h2>
+    <h2>Od {{ dateFrom }} do {{ dateTo }}</h2>
+
+
+    <h3>Dodaj raport...</h3>
+    <form method="POST" action="" enctype="multipart/form-data">
+      <p><input type="file" name="file"></p>
+              <p><input type="submit" value="Przelicz stan magazynowy"></p>
+
+<!--      <p><input type="submit" value="Przelicz stan magazynowy" onclick="$('#loading').show();"></p>-->
+    </form>
+<!--    <div id="loading" style="display:none;"><img src="{{ url_for('static', filename='pizza.gif') }}" alt="" />Przeliczam... Proszę czekać!</div>-->
+
+
+<style>
+ td {
+        width: 150px;
+        text-align: center;
+        border: 1px solid black;
+        padding: 5px;
+      }
+</style>
+<h3>Ostatnie przesłane dokumenty:</h3>
+<table>
+  <thead>
+    <tr>
+        <th>ID</th>
+        <th>Nazwa</th>
+        <th>Dokument</th>
+        <th>Ilość</th>
+
+    </tr>
+    </thead>
+    <tbody>
+     {% for row in data %}
+            <tr>
+                <td>{{row[0]}}</td>
+                <td>{{row[1]}}</td>
+                <td>{{row[2]}}</td>
+                <td>{{row[3]}}</td>
+
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+  </body>
+</html>
