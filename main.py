@@ -1,12 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import os
 import re
-from os import abort
-
-from os.path import join, dirname, realpath
 from sqlalchemy import create_engine
-from sqlalchemy import Table, Column, Float, Integer, String, MetaData, ForeignKey
-from sqlalchemy.sql import select, update, insert, text
+from sqlalchemy import Table, Column, Float, Integer, String, MetaData
+from sqlalchemy.sql import select, insert, text
 import datetime
 from datetime import timedelta
 import pandas as pd
@@ -14,12 +11,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium import webdriver
 
 import time
-import mysql.connector
-
-
-from os.path import join, dirname, realpath
-
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -29,9 +20,8 @@ app.config["DEBUG"] = True
 # Upload folder
 UPLOAD_FOLDER = 'static/files'
 
-app.config['UPLOAD_FOLDER'] =  UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {'xls'}
-
 
 # Database
 hostname = "localhost"
@@ -43,13 +33,10 @@ engine = create_engine("mysql+pymysql://{user}:{pw}@{host}/{db}"
                        .format(host=hostname, db=dbname, user=uname, pw=pwd))
 metadata = MetaData(engine)
 
-
 today = datetime.datetime.today()
-
 
 metadata.create_all(engine)
 connection = engine.connect()
-
 
 PZtemp = Table('PZdocsTemp', metadata,
               Column('ID', Integer),
@@ -57,12 +44,19 @@ PZtemp = Table('PZdocsTemp', metadata,
               Column('Jednostka', String),
               Column('Ilosc', Float),
               Column('Cena', Float)
-              )
+           )
+
+RWtemp = Table('RWdocsTemp', metadata,
+           Column('ID', Integer),
+           Column('Nazwa', String),
+           Column('Ilosc', Float),
+           Column('Jednostka', String)
+           )
 
 RAtemp = Table('RAdocsTemp', metadata,
            Column('Nazwa', String),
            Column('Ilosc', Float),
-           Column('Netto',Float)
+           Column('Netto', Float)
            )
 
 BO = Table('BO', metadata,
@@ -70,9 +64,10 @@ BO = Table('BO', metadata,
            Column('Nazwa', String),
            Column('Ilosc', Float),
            Column('Jednostka', String),
-           Column('WartoscNetto',Float),
-           Column('CenaZakupu',Float)
+           Column('WartoscNetto', Float),
+           Column('CenaZakupu', Float)
            )
+
 
 def getAssortmentFromID(a):
     i = text(
@@ -113,6 +108,7 @@ def getStockByName(a):
     result = connection.execute(i, {"y": a}).fetchall()
     return result
 
+
 def updateBO(name, totalQuantity):
     update_statement = BO.update() \
         .where(BO.c.Nazwa == name) \
@@ -132,7 +128,6 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Root URL
 
 @app.route('/')
 def index():
@@ -216,8 +211,9 @@ def index():
 
     connection.execute(a)
 
-     # Set The upload HTML template '\templates\index.html'
+    # Set The upload HTML template '\templates\index.html'
     return render_template('index.html')
+
 
 @app.route('/sm')
 def presentSM():
@@ -281,14 +277,34 @@ def presentSM():
 
     lastZWupdate = [a[0] for a in connection.execute(a)]
 
-
-
-
-
-    if not lastSMupdate:
+    if not lastSMupdate:  #Porównanie daty ostatniej aktualizacji tabeli do określenia rodzaju dokumentu
         return render_template('stockDocuments.html', data=data, lastSMupdate="Brak modyfikacji bilansu otwarcia")
     else:
-        return render_template('stockDocuments.html', data=data, lastSMupdate=lastSMupdate[0])
+        if lastPZupdate:
+            if lastPZupdate[0] == lastSMupdate[0]:
+                a = text(
+                    "SELECT Dokument FROM PZdocs "
+                    "ORDER BY Data DESC, Dokument DESC;"
+                )
+                lastDoc = connection.execute(a).fetchall()
+                lastPZ = [a[0] for a in lastDoc]
+                return render_template('stockDocuments.html', data=data, lastSMupdate=lastPZ[0])
+        if lastRWupdate:
+            if lastRWupdate[0] == lastSMupdate[0]:
+                return render_template('stockDocuments.html', data=data, lastSMupdate="Ostatni przesłany dokument: RW")
+        if lastZWupdate:
+            if lastZWupdate[0] == lastSMupdate[0]:
+                return render_template('stockDocuments.html', data=data, lastSMupdate="Ostatni przesłany dokument: ZW")
+        if lastZDupdate:
+            if lastZDupdate[0] == lastSMupdate[0]:
+                return render_template('stockDocuments.html', data=data, lastSMupdate="Ostatni przesłany dokument: ZD")
+        if lastRAupdate:
+            if lastRAupdate[0] == lastSMupdate[0]:
+                return render_template('stockDocuments.html', data=data, lastSMupdate="Ostatni przesłany dokument: Raport sprzedaży")
+        else:
+            return render_template('stockDocuments.html', data=data, lastSMupdate="Ostatni przesłany dokument: Nieznany")
+
+    # return render_template('stockDocuments.html', data=data, lastSMupdate="Btesttesttestotwarcia")
     # a =text(
     #     "SELECT UPDATE_TIME "
     #     "FROM   information_schema.tables "
@@ -298,8 +314,8 @@ def presentSM():
     # lastUpdate = connection.execute(a).fetchall()
     # print(lastUpdate)
 
-@app.route('/pz')
 
+@app.route('/pz')
 def presentPZ():
     a = text(
         "CREATE TABLE IF NOT EXISTS db.PZdocsTemp "
@@ -317,24 +333,7 @@ def presentPZ():
 
     connection.execute(a)
 
-
-    # a = text(
-    #     "CREATE TABLE IF NOT EXISTS db.PZdocs "
-    #     "(ID BIGINT NOT NULL, "
-    #     "Nazwa TEXT NOT NULL, "
-    #     "Dokument TEXT NULL, "
-    #     "Jednostka TEXT NULL, "
-    #     "Ilosc DOUBLE NULL, "
-    #     "Cena DOUBLE NULL, "
-    #     "Data TEXT NULL)"
-    #     "ENGINE=InnoDB "
-    #     "DEFAULT CHARSET=utf8mb4 "
-    #     "COLLATE=utf8mb4_general_ci; "
-    # )
-    #
-    # connection.execute(a)
-
-    a = text (
+    a = text(
         "SELECT * FROM PZdocs "
         "ORDER BY Data DESC, Dokument DESC;"
     )
@@ -346,17 +345,13 @@ def presentPZ():
     )
 
     lastDoc = connection.execute(a).fetchall()
-    # print(lastDoc)
     if not lastDoc:
         return render_template('pzDocuments.html', data=data, lastPZ=0)
     else:
         lastPZ = [a[0] for a in lastDoc]
         return render_template('pzDocuments.html', data=data, lastPZ=lastPZ[0])
-    # docNumber = re.split('[/](.*)', lastPZ[0])
-    # print(docNumber[0])
 
-
-
+    # return render_template('pzDocuments.html', data=data, lastPZ=lastPZ[0])
 
     # a = text(
     #     "SELECT Dokument FROM PZdocs "
@@ -392,25 +387,18 @@ def presentPZ():
     #         print("Brakuje tego: ",a)
     #     #
 
-
         #     print("Elegancko mamy ten dokument:", docNumberFromSQL[0])
         #
         #     print("Brakuje: ",count, "/PZ/")
-
-
-
     # date = datetime.datetime.strptime(lastDocFromSql[0], '%Y-%m-%d')
     # goodFromDate = date + timedelta(days=1)
     # goodToDate = today - timedelta(days=1)
     # goodFromDate = str(goodFromDate.strftime('%Y-%m-%d'))
     # goodToDate = str(goodToDate.strftime('%Y-%m-%d'))
     # print('Wykonaj raport od: ', goodFromDate, ' do: ', goodToDate)
-    return render_template('pzDocuments.html', data=data, lastPZ=lastPZ[0])
-
 
 
 @app.route('/pz', methods=['POST'])
-
 def uploadPZ():
     # get the uploaded file
     uploaded_file = request.files['file']
@@ -422,7 +410,7 @@ def uploadPZ():
             uploaded_file.save(file_path)
             importPZ(file_path)
 
-            if checkIfPZExist(importPZ(file_path)) == True:
+            if checkIfPZExist(importPZ(file_path)):
 
                 flash(u'Dokument istnieje w bazie lub zły typ dokumentu', 'error')
                 return redirect(url_for('presentPZ'))
@@ -433,15 +421,12 @@ def uploadPZ():
         else:
             flash(u'Chujowy typ pliku', 'error')
             return redirect(url_for('presentPZ'))
-
     else:
         flash(u'Brak dokumentu', 'error')
         return redirect(url_for('presentPZ'))
 
 
-
 def importPZ(filePath):
-
     xlsData = pd.read_excel(filePath, skiprows=4, usecols=['Lp.', 'Nazwa', 'Jedn.', 'Ilość', 'Cena', 'Dokument', 'Data'])
     open(filePath, "r")
     xlsData.rename(columns={'Ilość': 'Ilosc'}, inplace=True)
@@ -457,16 +442,14 @@ def importPZ(filePath):
     xlsData['Nazwa'] = xlsData['Nazwa'].str.replace('( [(][0-9]*[/]*[0-9]*[)])', '')
     return xlsData
 
+
 def checkIfPZExist(df):
-
     ifExist = False
-
     for a in df['Dokument']:
-        # docNumber = re.split('[/](.*)', a)
         docHeader = re.split('([/][^0-9]*[/])', a)
         if docHeader[1] == '/PZ/':
 
-            if ifExist == True:
+            if ifExist:
                 break
             else:
                 i = text(
@@ -479,19 +462,18 @@ def checkIfPZExist(df):
                 if result:
                     ifExist = True
                     break
-
         else:
             ifExist = True
             break
 
-    if ifExist == False:
-
+    if not ifExist:
         addToPZdocsTemp(df)  # Dodanie raportu (dataframe) do tymczasowej tabeli
         PZtoStockCalculation()  # Dodanie towaru z PZ do stanu magazynowego
         addToPZdocs(df)  # Dodanie do tabeli z wszystkimi paragonami
         PZtemp.drop(engine)  # usuniecie tymczasowej tabeli potrzebnej do przeliczenia
 
     return ifExist
+
 
 def addToPZdocsTemp(df):
     b = text(
@@ -531,7 +513,7 @@ def PZtoStockCalculation():
 
                     connection.execute(update_statement)
 
-            if ifExist == False:  # jeśli nie istnieje asortyment na magazynie to dodaje pozycje
+            if not ifExist:  # jeśli nie istnieje asortyment na magazynie to dodaje pozycje
                 sm = selectFrom(BO)
 
                 i = insert(BO)
@@ -541,7 +523,6 @@ def PZtoStockCalculation():
                 connection.execute(i)
 
         else:
-
             ifExist = False
             sm = selectFrom(BO)
 
@@ -558,7 +539,7 @@ def PZtoStockCalculation():
 
                     connection.execute(update_statement)
 
-            if ifExist == False:  # jeśli nie istnieje asortyment na magazynie to dodaje pozycje
+            if not ifExist:  # jeśli nie istnieje asortyment na magazynie to dodaje pozycje
 
                 sm = selectFrom(BO)
                 i = insert(BO)
@@ -566,7 +547,6 @@ def PZtoStockCalculation():
                               'Jednostka': a[2], 'WartoscNetto': a[3] * a[4],
                               'CenaZakupu': a[4]})  # dodanie z pz asortymentu którego nie było na magazynie ID + 1
                 connection.execute(i)
-
 
 
 def addToPZdocs(df):
@@ -584,24 +564,22 @@ def addToPZdocs(df):
         connection.execute(sql, value)
 
 
-
 @app.route('/rw')
-
 def presentRW():
-    # a = text(
-    #     "CREATE TABLE IF NOT EXISTS db.RWdocs "
-    #     "(ID BIGINT NOT NULL, "
-    #     "Nazwa TEXT NOT NULL, "
-    #     "Dokument TEXT NULL, "
-    #     "Jednostka TEXT NULL, "
-    #     "Ilosc DOUBLE NULL, "
-    #     "Data TEXT NULL)"
-    #     "ENGINE=InnoDB "
-    #     "DEFAULT CHARSET=utf8mb4 "
-    #     "COLLATE=utf8mb4_general_ci; "
-    # )
-    #
-    # connection.execute(a)
+    a = text(
+        "CREATE TABLE IF NOT EXISTS db.RWdocsTemp "
+        "(ID BIGINT NOT NULL, "
+        "Nazwa TEXT NOT NULL, "
+        "Dokument TEXT NULL, "
+        "Jednostka TEXT NULL, "
+        "Ilosc DOUBLE NULL, "
+        "Data TEXT NULL)"
+        "ENGINE=InnoDB "
+        "DEFAULT CHARSET=utf8mb4 "
+        "COLLATE=utf8mb4_general_ci; "
+    )
+
+    connection.execute(a)
 
     a = text (
         "SELECT * FROM RWdocs "
@@ -610,8 +588,8 @@ def presentRW():
     data = connection.execute(a).fetchall()
     return render_template('rwDocuments.html', data=data)
 
-@app.route('/rw', methods=['POST'])
 
+@app.route('/rw', methods=['POST'])
 def uploadRW():
     # get the uploaded file
     uploaded_file = request.files['file']
@@ -623,7 +601,7 @@ def uploadRW():
             uploaded_file.save(file_path)
             importRW(file_path)
 
-            if checkIfRWExist(importRW(file_path)) == True:
+            if checkIfRWExist(importRW(file_path)):
 
                 flash(u'Dokument istnieje w bazie lub zły typ dokumentu', 'error')
                 return redirect(url_for('presentRW'))
@@ -634,7 +612,6 @@ def uploadRW():
         else:
             flash(u'Chujowy typ pliku', 'error')
             return redirect(url_for('presentRW'))
-
     else:
         flash(u'Brak dokumentu', 'error')
         return redirect(url_for('presentRW'))
@@ -666,7 +643,7 @@ def checkIfRWExist(df):
         docHeader = re.split('([/][^0-9]*[/])', a)
         if docHeader[1] == '/RW/':
 
-            if ifExist == True:
+            if ifExist:
                 break
             else:
                 i = text(
@@ -677,8 +654,8 @@ def checkIfRWExist(df):
                 result = connection.execute(i, {"y": a}).fetchall()
                 result = [a[2] for a in result]
                 print(result)
-                for a in result:
-                    docNumberFromDB = re.split('[/](.*)', a)
+                for b in result:
+                    docNumberFromDB = re.split('[/](.*)', b)
                     if docNumberFromDB[0] <= docNumber[0]:
                         ifExist = True
                         break
@@ -686,19 +663,68 @@ def checkIfRWExist(df):
             ifExist = True
             break
 
-    if ifExist == False:
-        b = text(
-            "SELECT COUNT(*) "
-            "FROM RWdocs;"
-        )
-        rowsCount = [a[0] for a in connection.execute(b)]
-        count = 0
-        for i, row in df.iterrows():
-            count += 1
-            sql = "INSERT INTO RWdocs (ID, Nazwa, Dokument, Jednostka, Ilosc, Data) VALUES (%s, %s, %s, %s, %s, %s)"
-            value = (rowsCount[0] + count, row['Nazwa'], row['Dokument'], row['Jednostka'], row['Ilosc'], row['Data'])
-            connection.execute(sql, value)
+    if not ifExist:
+        addToRWdocsTemp(df)  # Dodanie raportu (dataframe) do tymczasowej tabeli
+        RWtoStockCalculation()  # Dodanie towaru z RW do stanu magazynowego
+        addToRWdocs(df)  # Dodanie do tabeli z wszystkimi dokumentami
+        RWtemp.drop(engine)  # usuniecie tymczasowej tabeli potrzebnej do przeliczenia
+
     return ifExist
+
+
+def addToRWdocsTemp(df):
+    b = text(
+        "SELECT COUNT(*) "
+        "FROM RWdocsTemp;"
+    )
+    rowsCount = [a[0] for a in connection.execute(b)]
+    count = 0
+    for i, row in df.iterrows():
+        count += 1
+        sql = "INSERT INTO RWdocsTemp (ID, Nazwa, Dokument, Jednostka, Ilosc, Data) VALUES (%s, %s, %s, %s, %s, %s)"
+        value = (
+            rowsCount[0] + count, row['Nazwa'], row['Dokument'], row['Jednostka'], row['Ilosc'],
+            row['Data'])
+        connection.execute(sql, value)
+
+
+def RWtoStockCalculation():
+
+    rw = selectFrom(RWtemp)
+
+    for a in rw:
+        print(a)
+        ifExist = False
+        sm = selectFrom(BO)
+
+        for b in sm:
+
+            if a[1] == b[1]:
+                ifExist = True
+
+                update_statement = BO.update() \
+                    .where(BO.c.ID == b[0]) \
+                    .values(Ilosc=BO.c.Ilosc + a[2],
+                            WartoscNetto=BO.c.WartoscNetto + (a[2] * b[5]))  # rw do stanu
+
+                connection.execute(update_statement)
+
+        if not ifExist:
+            print("Brak pozycji ", a, " z dokumentu RW na stanie magazynu", file=open("output.txt", "a"))
+
+def addToRWdocs(df):
+    b = text(
+        "SELECT COUNT(*) "
+        "FROM RWdocs;"
+    )
+    rowsCount = [a[0] for a in connection.execute(b)]
+    count = 0
+    for i, row in df.iterrows():
+        count += 1
+        sql = "INSERT INTO RWdocs (ID, Nazwa, Dokument, Jednostka, Ilosc, Data) VALUES (%s, %s, %s, %s, %s, %s)"
+        value = (
+        rowsCount[0] + count, row['Nazwa'], row['Dokument'], row['Jednostka'], row['Ilosc'], row['Data'])
+        connection.execute(sql, value)
 
 # @app.route('/dashboard/')
 # def display_deals():
@@ -737,7 +763,7 @@ def checkIfRWExist(df):
 @app.route('/redirectSaleReport')
 def getSaleReport():
     driver = webdriver.Chrome(executable_path="/Users/szymonbzdyk/Downloads/chromedriver")
-    driver.get ("http://172.21.2.246:8087/eobiekt");
+    driver.get ("http://172.21.2.246:8087/eobiekt")
     driver.find_element_by_xpath('//*[@id="root"]/div/div/div/div/form/div/div[2]/div/div/div').click() #Otwarcie listy z uzytkownikami
     driver.find_element_by_xpath('//*[@id="menu-"]/div[3]/ul').send_keys('x' + Keys.RETURN) #Wybor uzytkownika z listy dostepnych
     driver.find_element_by_xpath('//*[@id="root"]/div/div/div/div/form/div/div[3]/div/div/input').send_keys('xxxxxx123' + Keys.RETURN) #Hasło
@@ -749,10 +775,11 @@ def getSaleReport():
     driver.find_element_by_xpath('//*[@id="root"]/div/div/div/div[2]/div[3]/div[4]/a/div').click() #Otwarcie raportu sprzedaży wg asortymentu
     time.sleep(0.5)
 
+
 @app.route('/redirectPZReport')
 def getPZReport():
     driver = webdriver.Chrome(executable_path="/Users/szymonbzdyk/Downloads/chromedriver")
-    driver.get("http://172.21.2.246:8087/eobiekt");
+    driver.get("http://172.21.2.246:8087/eobiekt")
     driver.find_element_by_xpath(
         '//*[@id="root"]/div/div/div/div/form/div/div[2]/div/div/div').click()  # Otwarcie listy z uzytkownikami
     driver.find_element_by_xpath('//*[@id="menu-"]/div[3]/ul').send_keys(
@@ -769,10 +796,11 @@ def getPZReport():
     driver.find_element_by_xpath(
         '//*[@id="root"]/div/div/div/div[2]/div[1]/div[11]/div/div/div[1]/div/div/label[1]/span[1]/span[1]/input').click()  # wybor typu dokumentu
 
+
 @app.route('/redirectRWReport')
 def getRWReport():
     driver = webdriver.Chrome(executable_path="/Users/szymonbzdyk/Downloads/chromedriver")
-    driver.get("http://172.21.2.246:8087/eobiekt");
+    driver.get("http://172.21.2.246:8087/eobiekt")
     driver.find_element_by_xpath(
         '//*[@id="root"]/div/div/div/div/form/div/div[2]/div/div/div').click()  # Otwarcie listy z uzytkownikami
     driver.find_element_by_xpath('//*[@id="menu-"]/div[3]/ul').send_keys(
@@ -789,10 +817,11 @@ def getRWReport():
     driver.find_element_by_xpath(
         '//*[@id="root"]/div/div/div/div[2]/div[1]/div[11]/div/div/div[1]/div/div/label[3]/span[1]/span[1]/input').click()  # Wybor typu dokumentu
 
+
 @app.route('/redirectZWReport')
 def getZWReport():
     driver = webdriver.Chrome(executable_path="/Users/szymonbzdyk/Downloads/chromedriver")
-    driver.get("http://172.21.2.246:8087/eobiekt");
+    driver.get("http://172.21.2.246:8087/eobiekt")
     driver.find_element_by_xpath(
         '//*[@id="root"]/div/div/div/div/form/div/div[2]/div/div/div').click()  # Otwarcie listy z uzytkownikami
     driver.find_element_by_xpath('//*[@id="menu-"]/div[3]/ul').send_keys(
@@ -813,7 +842,7 @@ def getZWReport():
 @app.route('/redirectZDReport')
 def getZDReport():
     driver = webdriver.Chrome(executable_path="/Users/szymonbzdyk/Downloads/chromedriver")
-    driver.get("http://172.21.2.246:8087/eobiekt");
+    driver.get("http://172.21.2.246:8087/eobiekt")
     driver.find_element_by_xpath(
         '//*[@id="root"]/div/div/div/div/form/div/div[2]/div/div/div').click()  # Otwarcie listy z uzytkownikami
     driver.find_element_by_xpath('//*[@id="menu-"]/div[3]/ul').send_keys(
@@ -850,24 +879,6 @@ def presentRA():
     )
 
     connection.execute(a)
-    # a = text(
-    #     "CREATE TABLE IF NOT EXISTS db.RAdocs "
-    #     "(ID BIGINT NOT NULL, "
-    #     "Nazwa TEXT NOT NULL, "
-    #     "Dokument TEXT NULL, "
-    #     "Ilosc TEXT NULL, "
-    #     "Netto DOUBLE NULL, "
-    #     "VAT DOUBLE NULL, "
-    #     "Brutto TEXT NULL, "
-    #     "Stawka TEXT NULL, "
-    #     "od TEXT NULL, "
-    #     "do TEXT NULL)"
-    #     "ENGINE=InnoDB "
-    #     "DEFAULT CHARSET=utf8mb4 "
-    #     "COLLATE=utf8mb4_general_ci; "
-    # )
-    #
-    # connection.execute(a)
 
     a = text (
         "SELECT * FROM RAdocs "
@@ -878,7 +889,6 @@ def presentRA():
         "SELECT MAX(do) FROM RAdocs "
         "ORDER BY do DESC;"
     )
-    date = today
     validDate = connection.execute(a).fetchall()
     dataFromSql = [a[0] for a in validDate]
     if not dataFromSql[0]:
@@ -892,6 +902,7 @@ def presentRA():
 
         return render_template('addBills.html', data=data, dateFrom=goodFromDate, dateTo=goodToDate)
 
+
 @app.route('/addBills', methods=['POST'])
 def uploadRA():
     # get the uploaded file
@@ -904,7 +915,7 @@ def uploadRA():
             uploaded_file.save(file_path)
             importRA(file_path)
 
-            if checkIfRAExist(importRA(file_path)) == True:
+            if checkIfRAExist(importRA(file_path)):
 
                 flash(u'Dokument istnieje w bazie lub zły typ dokumentu', 'error')
                 return redirect(url_for('presentRA'))
@@ -919,6 +930,7 @@ def uploadRA():
     else:
         flash(u'Brak dokumentu', 'error')
         return redirect(url_for('presentRA'))
+
 
 def importRA(filepath):
     xlsData = pd.read_excel(filepath, usecols=['Chochołowskie Termy Sp. z o. o.'])
@@ -969,6 +981,7 @@ def importRA(filepath):
 
     return xlsData
 
+
 def checkIfRAExist(df):
 
     ifExist = False
@@ -978,7 +991,7 @@ def checkIfRAExist(df):
         docHeader = re.split('([/][^0-9]*[/])', a)
         if docHeader[1] == '/RA/':
 
-            if ifExist == True:
+            if ifExist:
                 break
             else:
                 i = text(
@@ -995,16 +1008,15 @@ def checkIfRAExist(df):
             ifExist = True
             break
 
-    if ifExist == False:
+    if not ifExist:
 
         addToRAdocsTemp(df) #Dodanie raportu (dataframe) do tymczasowej tabeli
         stockCalculation() #Przeliczenie magazynu
         addToRAdocs(df) #Dodanie do tabeli z wszystkimi paragonami
         RAtemp.drop(engine) #usuniecie tymczasowej tabeli potrzebnej do przeliczenia
 
-
     return ifExist
-#
+
 
 def addToRAdocsTemp(df):
     b = text(
@@ -1038,6 +1050,7 @@ def addToRAdocs(df):
         rowsCount[0] + count, row['Nazwa'], row['Dokument'], row['Ilosc'], row['Netto'], row['VAT'], row['Brutto'],
         row['Stawka'], row['od'], row['do'])
         connection.execute(sql, value)
+
 
 def stockCalculation():
     # count = 0
@@ -1084,23 +1097,22 @@ def stockCalculation():
                     updateBO(assortmentNameFromSet[0], total)
 
 
-
 @app.route('/assortment')
 def presentAssortment():
     return render_template('assortment.html')
 
+
 @app.route('/sets')
 def presentSets():
     return render_template('sets.html')
+
 
 @app.route('/inventory')
 def presentInventory():
     return render_template('inventory.html')
 
 
-
-
-if (__name__ == "__main__"):
+if __name__ == "__main__":
     app.secret_key = 'tajne'
     app.config['SESSION_TYPE'] = 'filesystem'
-    app.run(port = 5000)
+    app.run(port=5000)
